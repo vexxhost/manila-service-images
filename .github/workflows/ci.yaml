@@ -112,7 +112,10 @@ jobs:
             share_creation_retry_number=2
             backend_names=generic
             multi_backend=false
+            image_with_share_tools=manila-service-image
+            image_username=manila
             image_password=manila
+            client_vm_flavor_ref=100
 
       - name: Run Manila smoke test
         run: ./hack/smoke-test.sh
