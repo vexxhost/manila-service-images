@@ -1,0 +1,180 @@
+name: ci
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: depot-ubuntu-24.04
+    concurrency:
+      group: build-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: step-security/setup-uv@ccf0a26ce9117d9e99292b0ce953ea5d9ffe778e # v7.3.0
+        with:
+          enable-cache: true
+
+      - run: uv sync
+
+      - run: sudo apt-get update
+
+      - run: sudo apt-get install -y $(uv run bindep -b)
+
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: /home/runner/.cache/image-create
+          key: dib-${{ hashFiles('versions.env') }}-${{ hashFiles('pyproject.toml') }}-${{ github.head_ref || github.ref_name }}
+          restore-keys: |
+            dib-${{ hashFiles('versions.env') }}-${{ hashFiles('pyproject.toml') }}
+            dib-${{ hashFiles('versions.env') }}
+
+      - run: uv run ./hack/build-image.sh
+        env:
+          MANILA_IMAGE_OUTPUT: manila-service-image.qcow2
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: manila-service-image-${{ github.run_id }}
+          path: manila-service-image.qcow2
+          if-no-files-found: error
+          retention-days: 7
+
+  smoketest:
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 120
+    concurrency:
+      group: smoketest-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: manila-service-image-${{ github.run_id }}
+
+      - name: Deploy OpenStack cloud
+        uses: gophercloud/devstack-action@60ca1042045c0c9e3e001c64575d381654ffcba1 # v0.19
+        with:
+          enable_workaround_docker_io: false
+          enabled_services: tempest
+          conf_overrides: |
+            GLANCE_LIMIT_IMAGE_SIZE_TOTAL=10000
+            LIBS_FROM_GIT=python-manilaclient
+            VOLUME_BACKING_FILE_SIZE=24G
+
+            enable_plugin manila https://opendev.org/openstack/manila
+            enable_plugin manila-tempest-plugin https://opendev.org/openstack/manila-tempest-plugin
+
+            SHARE_DRIVER=manila.share.drivers.generic.GenericShareDriver
+            MANILA_ENABLED_BACKENDS=generic
+            MANILA_OPTGROUP_generic_driver_handles_share_servers=True
+            MANILA_OPTGROUP_generic_connect_share_server_to_tenant_network=True
+            MANILA_DEFAULT_SHARE_TYPE_EXTRA_SPECS='snapshot_support=True create_share_from_snapshot_support=True'
+            MANILA_CONFIGURE_DEFAULT_TYPES=True
+            MANILA_SERVICE_IMAGE_ENABLED=True
+            MANILA_SERVICE_IMAGE_URL=file://${{ github.workspace }}/manila-service-image.qcow2
+            MANILA_SERVICE_IMAGE_NAME=manila-service-image
+            MANILA_USE_SERVICE_INSTANCE_PASSWORD=True
+            MANILA_USE_UWSGI=False
+            MANILA_INSTALL_TEMPEST_PLUGIN_SYSTEMWIDE=True
+            TEMPEST_USE_TEST_ACCOUNTS=True
+            GLANCE_ENFORCE_SCOPE=False
+
+            [[test-config|\$TEMPEST_CONFIG]]
+            [share]
+            default_share_type_name=default
+            multitenancy_enabled=true
+            suppress_errors_in_cleanup=true
+            share_creation_retry_number=2
+            backend_names=generic
+            multi_backend=false
+            image_password=manila
+
+      - name: Install Tempest runner dependencies
+        run: python3 -m pip install --user tox
+
+      - name: Run Manila smoke test
+        run: ./hack/smoke-test.sh
+
+      - name: Start CI debugging on failures
+        uses: owenthereal/action-upterm@f26ebc11e22a09b8365f39d2cdafd06f63b42053 # v1.14.0
+        if: ${{ failure() }}
+        with:
+          wait-timeout-minutes: 5
+
+  release:
+    runs-on: ubuntu-latest
+    needs: smoketest
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Download image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+
+      - name: Prepare qcow2 files list
+        id: prepare_files
+        shell: bash
+        run: |
+          files=$(find . -mindepth 2 -maxdepth 2 -name "*.qcow2" -type f)
+          if [ -n "$files" ]; then
+            echo "Found qcow2 files:"
+            echo "$files"
+            {
+              echo "files<<EOF"
+              echo "$files"
+              echo "EOF"
+            } >> $GITHUB_OUTPUT
+          else
+            echo "No qcow2 files found"
+            echo "files=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate release version
+        uses: alepee/calendar-version-action@288fc1fd1e6d3e892dd1f95a1e72e06348dd44b3 # v1
+        id: version
+        with:
+          dateFormat: "YYYY.0M"
+          format: "%NOW%-%MICRO%"
+
+      - uses: step-security/action-gh-release@dc29ef0d1f6f9a032a97ec797d9cb7ea788dde41 # v2.6.1
+        if: steps.prepare_files.outputs.files != ''
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+          files: ${{ steps.prepare_files.outputs.files }}
+          prerelease: false
+          make_latest: true
+          generate_release_notes: true
+

@@ -1,0 +1,14 @@
+*.qcow2
+*.raw
+*.img
+*.log
+
+/.venv/
+/.tox/
+/dist/
+/tmp/
+
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
