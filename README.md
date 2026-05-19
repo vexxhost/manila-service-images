@@ -20,10 +20,11 @@ can open a normal pull request when upstream `master` moves.
 
 Every push to `main` builds `manila-service-image.qcow2`, deploys a DevStack
 cloud with Manila's generic driver, uploads the image as the Manila service
-image, and runs one Manila Tempest test:
+image, and runs one Manila Tempest scenario test that boots client VMs, mounts
+the NFS share, writes data, and reads it back:
 
 ```text
-manila_tempest_tests.tests.api.test_shares.SharesNFSTest.test_create_get_delete_share
+manila_tempest_tests.tests.scenario.test_share_basic_ops.TestShareBasicOpsNFS.test_read_write_two_vms
 ```
 
 If the smoke test passes, the workflow publishes the image as a GitHub release
@@ -54,4 +55,3 @@ MANILA_IMAGE_ELEMENTS_REF=master \
 MANILA_IMAGE_ELEMENTS_COMMIT=4d63d866664ab9e45b8f08a4ff4040f9aa064c00 \
 uv run ./hack/build-image.sh
 ```
-
