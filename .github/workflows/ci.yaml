@@ -114,9 +114,6 @@ jobs:
             multi_backend=false
             image_password=manila
 
-      - name: Install Tempest runner dependencies
-        run: python3 -m pip install --user tox
-
       - name: Run Manila smoke test
         run: ./hack/smoke-test.sh
 
