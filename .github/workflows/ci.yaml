@@ -78,8 +78,10 @@ jobs:
         uses: gophercloud/devstack-action@60ca1042045c0c9e3e001c64575d381654ffcba1 # v0.19
         with:
           enable_workaround_docker_io: false
-          enabled_services: tempest
           conf_overrides: |
+            INSTALL_TEMPEST=True
+            ENABLED_SERVICES=\${ENABLED_SERVICES/,-tempest/}
+
             GLANCE_LIMIT_IMAGE_SIZE_TOTAL=10000
             LIBS_FROM_GIT=python-manilaclient
             VOLUME_BACKING_FILE_SIZE=24G
