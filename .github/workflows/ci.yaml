@@ -11,7 +11,7 @@ permissions: {}
 
 jobs:
   build:
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     concurrency:
       group: build-${{ github.ref }}
       cancel-in-progress: true
@@ -177,4 +177,3 @@ jobs:
           prerelease: false
           make_latest: true
           generate_release_notes: true
-
