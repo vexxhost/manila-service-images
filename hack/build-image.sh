@@ -23,6 +23,7 @@ MANILA_IMAGE_RELEASE=${env_MANILA_IMAGE_RELEASE:-${MANILA_IMAGE_RELEASE}}
 
 MANILA_IMAGE_NAME=${MANILA_IMAGE_NAME:-manila-service-image}
 MANILA_IMAGE_OUTPUT=${MANILA_IMAGE_OUTPUT:-${ROOT_DIR}/${MANILA_IMAGE_NAME}.qcow2}
+MANILA_IMAGE_FORMATS=${MANILA_IMAGE_FORMATS:-qcow2}
 MANILA_IMAGE_ARCH=${MANILA_IMAGE_ARCH:-amd64}
 MANILA_USER=${MANILA_USER:-manila}
 MANILA_PASSWORD=${MANILA_PASSWORD:-manila}
@@ -69,10 +70,13 @@ export DIB_DHCP_TIMEOUT="${DHCP_TIMEOUT}"
 read -r -a extra_dib_args <<< "${DIB_EXTRA_ARGS:-}"
 
 disk-image-create \
-    -t qcow2 \
+    -t "${MANILA_IMAGE_FORMATS}" \
     -a "${MANILA_IMAGE_ARCH}" \
     -o "${output_base}" \
     "${extra_dib_args[@]}" \
     vm manila-ubuntu-minimal dhcp-all-interfaces manila-ssh ubuntu-nfs ubuntu-cifs
 
-test -f "${output_base}.qcow2"
+read -r -a image_formats <<< "${MANILA_IMAGE_FORMATS//,/ }"
+for image_format in "${image_formats[@]}"; do
+    test -f "${output_base}.${image_format}"
+done

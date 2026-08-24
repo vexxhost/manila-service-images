@@ -28,11 +28,24 @@ manila_tempest_tests.tests.scenario.test_share_basic_ops.TestShareBasicOpsNFS.te
 ```
 
 If the smoke test passes, the workflow publishes the image as a GitHub release
-asset. Atmosphere can later consume the image without coupling it to the
-Atmosphere version by using:
+asset. Release assets include both `.qcow2` and gzip-compressed raw images
+(`.raw.gz`). To use the raw image, decompress it first:
+
+```shell
+gunzip -c manila-service-image.raw.gz > manila-service-image.raw
+```
+
+Atmosphere can later consume the image without coupling it to the Atmosphere
+version by using:
 
 ```text
 https://github.com/vexxhost/manila-service-images/releases/latest/download/manila-service-image.qcow2
+```
+
+The raw asset is available at:
+
+```text
+https://github.com/vexxhost/manila-service-images/releases/latest/download/manila-service-image.raw.gz
 ```
 
 ## Building Locally
@@ -47,10 +60,12 @@ uv run ./hack/build-image.sh
 ```
 
 The output is `manila-service-image.qcow2` by default. You can override the
-output path or upstream source metadata with environment variables:
+output path, image formats, or upstream source metadata with environment
+variables:
 
 ```shell
 MANILA_IMAGE_OUTPUT=out/manila-service-image.qcow2 \
+MANILA_IMAGE_FORMATS=qcow2,raw \
 MANILA_IMAGE_ELEMENTS_REF=master \
 MANILA_IMAGE_ELEMENTS_COMMIT=4d63d866664ab9e45b8f08a4ff4040f9aa064c00 \
 uv run ./hack/build-image.sh
