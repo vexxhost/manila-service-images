@@ -121,7 +121,7 @@ jobs:
         run: ./hack/smoke-test.sh
 
       - name: Start CI debugging on failures
-        uses: owenthereal/action-upterm@f26ebc11e22a09b8365f39d2cdafd06f63b42053 # v1.14.0
+        uses: owenthereal/action-upterm@175d33786004a53b1538bcf157402b7197ce5029 # v2.6.0
         if: ${{ failure() }}
         with:
           wait-timeout-minutes: 5
